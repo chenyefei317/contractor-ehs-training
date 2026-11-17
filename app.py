@@ -155,21 +155,29 @@ def generate_qr_code(url):
     img.save(buffered, format="PNG")
     return buffered.getvalue()
 
+def get_font_path():
+    """自动匹配系统中可用的通用/开源中文字体路径"""
+    possible_paths = [
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux 云端文泉驿开源字体
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux 思源黑体
+        "/System/Library/Fonts/STHeiti Medium.ttc",     # Mac 华文黑体
+        "/System/Library/Fonts/PingFang.ttc",           # Mac 苹方字体
+        "C:\\Windows\\Fonts\\msyh.ttc",                  # Windows 微软雅黑
+        "C:\\Windows\\Fonts\\simhei.ttf"                 # Windows 黑体
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    return None
+
 # ================= 核心模块：生成独立 PDF =================
 def generate_viron_pdf(rec):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
     
-    font_path = "SimHei.ttf"
-    if not os.path.exists(font_path):
-        mac_st_heiti = "/System/Library/Fonts/STHeiti Medium.ttc"
-        win_simhei = "C:\\Windows\\Fonts\\simhei.ttf"
-        if os.path.exists(mac_st_heiti):
-            font_path = mac_st_heiti
-        elif os.path.exists(win_simhei):
-            font_path = win_simhei
-        else:
-            return None 
+    font_path = get_font_path()
+    if not font_path:
+        return None 
             
     pdf.add_font("CustomChinese", "", font_path)
     pdf.set_font("CustomChinese", size=10)
@@ -313,8 +321,7 @@ with st.sidebar:
     st.markdown("### 📱 手机扫码填写端")
     st.write("请让承包商员工扫描下方二维码，直接在手机上填写并手写签字：")
     
-    # 动态获取或自定义填写链接
-    default_url = "https://contractor-ehs-training.streamlit.app/"
+    default_url = "https://contractor-ehs-training.streamlit.app"
     target_url = st.text_input("输入手机访问的网址/局域网IP：", value=default_url, placeholder="例如: http://192.168.1.100:8501")
     
     if target_url:
@@ -460,7 +467,7 @@ with tab1:
             st.rerun()
 
     with col_sign_area:
-        st.markdown("##### ✍️ 参训人员手写签名（提供 8 个独立大签字框，供多人依次签字）")
+        st.markdown("##### ✍️ 参训人员手写签名")
         
         sig_tabs = st.tabs([f"签字 {i}" for i in range(1, 9)])
         canvases = []
