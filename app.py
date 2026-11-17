@@ -8,7 +8,6 @@ import os
 import base64
 import random
 from fpdf import FPDF
-import qrcode
 
 # ================= 页面基础配置 =================
 st.set_page_config(
@@ -146,42 +145,26 @@ def canvas_to_bytes(image_data):
             return None
     return None
 
-def generate_qr_code(url):
-    qr = qrcode.QRCode(version=1, box_size=10, border=2)
-    qr.add_data(url)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
-    return buffered.getvalue()
-
-def get_font_path():
-    """自动匹配系统中可用的通用/开源中文字体路径"""
-    possible_paths = [
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux 云端文泉驿开源字体
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux 思源黑体
-        "/System/Library/Fonts/STHeiti Medium.ttc",     # Mac 华文黑体
-        "/System/Library/Fonts/PingFang.ttc",           # Mac 苹方字体
-        "C:\\Windows\\Fonts\\msyh.ttc",                  # Windows 微软雅黑
-        "C:\\Windows\\Fonts\\simhei.ttf"                 # Windows 黑体
-    ]
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
-    return None
-
 # ================= 核心模块：生成独立 PDF =================
 def generate_viron_pdf(rec):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
     
-    font_path = get_font_path()
-    if not font_path:
-        return None 
+    font_path = "SimHei.ttf"
+    if not os.path.exists(font_path):
+        mac_st_heiti = "/System/Library/Fonts/STHeiti Medium.ttc"
+        win_simhei = "C:\\Windows\\Fonts\\simhei.ttf"
+        if os.path.exists(mac_st_heiti):
+            font_path = mac_st_heiti
+        elif os.path.exists(win_simhei):
+            font_path = win_simhei
+        else:
+            return None 
             
     pdf.add_font("CustomChinese", "", font_path)
     pdf.set_font("CustomChinese", size=10)
     
+    # 页眉：独立 PDF 档案正式标题设置为 “承包商EHS入厂培训记录”
     pdf.set_font("CustomChinese", size=16)
     pdf.cell(190, 8, "慧瑞环保涂料(上海)有限公司", ln=True, align="C")
     pdf.set_font("CustomChinese", size=18)
@@ -189,6 +172,7 @@ def generate_viron_pdf(rec):
     pdf.set_font("CustomChinese", size=10)
     pdf.cell(190, 6, f"NO.: {rec['记录编号']}", ln=True, align="R")
     
+    # 基础信息表格
     col_w = [30, 65, 30, 65]
     pdf.cell(col_w[0], 9, "培训主题", border=1, align="C")
     pdf.cell(col_w[1], 9, f"{rec['作业项目'][:14]}", border=1, align="C")
@@ -205,6 +189,7 @@ def generate_viron_pdf(rec):
     pdf.cell(col_w[2], 9, "主讲人", border=1, align="C")
     pdf.cell(col_w[3], 9, rec["主讲人"], border=1, ln=True, align="C")
     
+    # 参训人员信息区
     pdf.cell(col_w[0], 20, "参训人员信息", border=1, align="C")
     y_info = pdf.get_y()
     pdf.cell(160, 20, "", border=1, ln=True)
@@ -218,6 +203,7 @@ def generate_viron_pdf(rec):
     pdf.set_x(10 + col_w[0] + 3)
     pdf.cell(150, 4, f"特种作业证号：{rec['特种作业证号']}", ln=True)
     
+    # 多人签名嵌入区（支持最多 8 人签名）
     pdf.set_font("CustomChinese", size=10)
     pdf.cell(30, 24, "参训人员签字", border=1, align="C")
     y_sign_box = pdf.get_y()
@@ -237,6 +223,7 @@ def generate_viron_pdf(rec):
                 pass
             sx += 38
             
+    # 培训内容记录区
     pdf.set_font("CustomChinese", size=11)
     pdf.cell(190, 8, "培训内容记录", border=1, ln=True, align="C")
     
@@ -254,6 +241,7 @@ def generate_viron_pdf(rec):
     combined_text = "\n".join(clauses)
     pdf.multi_cell(190, 4.5, combined_text, border=1, align="L")
     
+    # 特种作业证书缩略图
     if rec.get("证照Bytes列表"):
         y_cert = pdf.get_y()
         pdf.cell(190, 32, "", border=1, ln=True)
@@ -270,6 +258,7 @@ def generate_viron_pdf(rec):
             x_offset += 44
         pdf.set_y(y_cert + 32)
         
+    # 考核与评估
     pdf.set_font("CustomChinese", size=9.5)
     pdf.cell(30, 7, "考核方式", border=1, align="C")
     pdf.cell(160, 7, f"  [√] {rec['考核方式']}", border=1, ln=True)
@@ -315,20 +304,6 @@ with col_logout:
     if st.button("🔒 退出登录"):
         st.session_state.authenticated = False
         st.rerun()
-
-# ================= 侧边栏：手机扫码填写端 =================
-with st.sidebar:
-    st.markdown("### 📱 手机扫码填写端")
-    st.write("请让承包商员工扫描下方二维码，直接在手机上填写并手写签字：")
-    
-    default_url = "https://contractor-ehs-training.streamlit.app"
-    target_url = st.text_input("输入手机访问的网址/局域网IP：", value=default_url, placeholder="例如: http://192.168.1.100:8501")
-    
-    if target_url:
-        qr_bytes = generate_qr_code(target_url)
-        st.image(qr_bytes, caption="微信/相机扫码直达填表", width=220)
-    
-    st.info("💡 **提示**：手机填表时，请确保手机和电脑连在同一个 Wi-Fi（局域网）下，并将 IP 改为您电脑的局域网 IP 地址。")
 
 tab1, tab2 = st.tabs(["📝 入场培训、多人员信息、多重签名与随机抽题", "🗂️ 培训台账与独立 PDF 导出"])
 
@@ -417,7 +392,7 @@ with tab1:
 
     st.divider()
 
-    st.subheader("三、 入场安全培训核心内容")
+    st.subheader("三、 入场安全培训核心内容（基于《安全生产法》与 IWAY 标准扩充）")
     with st.expander("📖 点击展开查看完整的 EHS 培训法律条文与厂区合规细则", expanded=True):
         st.markdown("""
         1. **安全生产法法定责任**：严格执行第30条（特种作业持证上岗）、第43条（危险作业现场专人管理）、第49条（遵守安全管理协议与发包方统一协调管理）。从业人员享有知情权、紧急避险权和拒绝违章指挥权，必须履行隐患排查报告与遵章守纪义务。
@@ -467,7 +442,7 @@ with tab1:
             st.rerun()
 
     with col_sign_area:
-        st.markdown("##### ✍️ 参训人员手写签名")
+        st.markdown("##### ✍️ 参训人员手写签名（提供 8 个独立大签字框，供多人依次签字）")
         
         sig_tabs = st.tabs([f"签字 {i}" for i in range(1, 9)])
         canvases = []
@@ -591,3 +566,4 @@ with tab2:
             )
         else:
             st.warning("⚠️ 未能加载系统字体，PDF 下载暂不可用。")
+```eof
