@@ -314,7 +314,7 @@ with st.sidebar:
     st.write("请让承包商员工扫描下方二维码，直接在手机上填写并手写签字：")
     
     # 动态获取或自定义填写链接
-    default_url = "http://localhost:8501"
+    default_url = "https://contractor-ehs-training.streamlit.app/"
     target_url = st.text_input("输入手机访问的网址/局域网IP：", value=default_url, placeholder="例如: http://192.168.1.100:8501")
     
     if target_url:
