@@ -5,8 +5,10 @@ from datetime import datetime
 from PIL import Image
 import io
 import os
+import json
 import base64
 import random
+import urllib.request
 from fpdf import FPDF
 import qrcode
 
@@ -17,10 +19,45 @@ st.set_page_config(
     layout="wide"
 )
 
+# ================= 数据持久化存储（JSON文件读写） =================
+RECORD_FILE = "training_records.json"
+
+def load_records():
+    if os.path.exists(RECORD_FILE):
+        try:
+            with open(RECORD_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for rec in data:
+                    if "签名Bytes列表_b64" in rec:
+                        rec["签名Bytes列表"] = [base64.b64decode(b) for b in rec["签名Bytes列表_b64"]]
+                    if "证照图片列表_b64" in rec:
+                        rec["证照Bytes列表"] = [(name, base64.b64decode(b)) for name, b in rec["证照图片列表_b64"]]
+                return data
+        except Exception:
+            return []
+    return []
+
+def save_records(records):
+    serializable_records = []
+    for rec in records:
+        r_copy = rec.copy()
+        if "签名Bytes列表" in r_copy:
+            r_copy["签名Bytes列表_b64"] = [base64.b64encode(b).decode("utf-8") for b in r_copy["签名Bytes列表"] if isinstance(b, bytes)]
+            r_copy.pop("签名Bytes列表", None)
+        if "证照Bytes列表" in r_copy:
+            r_copy["证照图片列表_b64"] = [(name, base64.b64encode(b).decode("utf-8")) for name, b in r_copy["证照Bytes列表"] if isinstance(b, bytes)]
+            r_copy.pop("证照Bytes列表", None)
+        r_copy.pop("证照图片列表", None)
+        serializable_records.append(r_copy)
+        
+    with open(RECORD_FILE, "w", encoding="utf-8") as f:
+        json.dump(serializable_records, f, ensure_ascii=False, indent=4)
+
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+
 if "records" not in st.session_state:
-    st.session_state.records = []
+    st.session_state.records = load_records()
 
 # ================= 20道题库与随机抽题初始化 =================
 QUESTION_BANK = [
@@ -156,18 +193,30 @@ def generate_qr_code(url):
     return buffered.getvalue()
 
 def get_font_path():
-    """自动匹配系统中可用的通用/开源中文字体路径"""
+    font_filename = "NotoSansSC-Regular.ttf"
+    if os.path.exists(font_filename):
+        return font_filename
+        
     possible_paths = [
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux 云端文泉驿开源字体
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux 思源黑体
-        "/System/Library/Fonts/STHeiti Medium.ttc",     # Mac 华文黑体
-        "/System/Library/Fonts/PingFang.ttc",           # Mac 苹方字体
-        "C:\\Windows\\Fonts\\msyh.ttc",                  # Windows 微软雅黑
-        "C:\\Windows\\Fonts\\simhei.ttf"                 # Windows 黑体
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/System/Library/Fonts/STHeiti Medium.ttc",
+        "/System/Library/Fonts/PingFang.ttc",
+        "C:\\Windows\\Fonts\\msyh.ttc",
+        "C:\\Windows\\Fonts\\simhei.ttf"
     ]
     for path in possible_paths:
         if os.path.exists(path):
             return path
+            
+    try:
+        font_url = "https://github.com/google/fonts/raw/main/ofl/notosanssc/NotoSansSC-Regular.ttf"
+        urllib.request.urlretrieve(font_url, font_filename)
+        if os.path.exists(font_filename):
+            return font_filename
+    except Exception:
+        pass
+        
     return None
 
 # ================= 核心模块：生成独立 PDF =================
@@ -223,10 +272,14 @@ def generate_viron_pdf(rec):
     y_sign_box = pdf.get_y()
     pdf.cell(160, 24, "", border=1, ln=True)
     
-    if rec.get("签名Bytes列表"):
+    sigs = rec.get("签名Bytes列表", [])
+    if not sigs and "签名Bytes列表_b64" in rec:
+        sigs = [base64.b64decode(b) for b in rec["签名Bytes列表_b64"]]
+
+    if sigs:
         sx = 43
         sy = y_sign_box + 2
-        for i, sig_b in enumerate(rec["签名Bytes列表"][:8]):
+        for i, sig_b in enumerate(sigs[:8]):
             try:
                 sig_io = io.BytesIO(sig_b)
                 if i == 4:
@@ -247,21 +300,25 @@ def generate_viron_pdf(rec):
         "3. 【现场考勤红线 (IWAY G5.1) 与薪资合规 (G5.8)】：凡在厂区内每周工作时间累计达18小时以上的承包商/外包员工，必须按规定纳入本厂电子考勤系统进行真实考勤打卡，严禁瞒报、漏报工时；现场薪资与加班费发放不得低于当地法定最低工资标准。",
         "4. 【危险作业许可管理】：严禁无证、超期或假证进行动火、临时用电、高处（≥2米）及有限空间作业。涉及危险作业必须提前向厂区 EHS 部门申报并获批《危险作业许可证》，落实安全交底、气体检测及专人全过程监护。",
         "5. 【劳动防护用品 (PPE) 规范】：所有入场人员必须规范穿戴反光背心、安全帽、符合标准的安全鞋。高处作业必须正确系挂双大钩安全带（做到高挂低用），特种劳保用品严禁流于形式。",
-        "6. 【消防安全与化学品管控】：厂区内全域严禁吸烟（除指定吸烟区外），严禁私自动用明火或遮挡、圈占消防器材。引入厂区使用的任何化学品必须提前报备并附带最新 SDS（安全数据表），落实防泄漏措施。",
+        "6. 【消防安全与化学品管控】：厂区内全域严禁吸烟（除指定吸烟区外），严禁私自动用明火或遮挡、圈占消防器材。引入厂区使用的任何化学品必须提前报备并附带最新 SDS（安全数据表）, 落实防泄漏措施。",
         "7. 【危险废弃物合规处置】：施工作业中产生的废机油、废油漆桶、含油抹布、废化学品包装物等属于危险废弃物，必须分类收集并交由厂区指定的危废暂存点规范处置，严禁私自倾倒、掩埋或混入普通生活垃圾。",
-        "8. 【事故应急与隐患报告机制】：发生任何安全、环境事故（无论大小）或发现严重安全隐患，现场人员必须立即停止作业，并在第一时间向慧瑞现场负责人及 EHS 部门报告，严禁瞒报、谎报或拖延不报。"
+        "8. 【事故应急与隐患报告机制】：发生任何安全、环境事故（无论大小）或发现严重隐患，现场人员必须立即停止作业，并在第一时间向慧瑞现场负责人及 EHS 部门报告，严禁瞒报、谎报或拖延不报。"
     ]
     combined_text = "\n".join(clauses)
     pdf.multi_cell(190, 4.5, combined_text, border=1, align="L")
     
-    if rec.get("证照Bytes列表"):
+    certs = rec.get("证照Bytes列表", [])
+    if not certs and "证照图片列表_b64" in rec:
+        certs = [(name, base64.b64decode(b)) for name, b in rec["证照图片列表_b64"]]
+
+    if certs:
         y_cert = pdf.get_y()
         pdf.cell(190, 32, "", border=1, ln=True)
         pdf.set_xy(12, y_cert + 2)
         pdf.set_font("CustomChinese", size=9)
         pdf.cell(180, 5, "附：特种作业操作证照核验存档（人证合一）：", ln=True)
         x_offset = 14
-        for _, cbytes in rec["证照Bytes列表"][:4]:
+        for _, cbytes in certs[:4]:
             try:
                 cert_io = io.BytesIO(cbytes)
                 pdf.image(cert_io, x=x_offset, y=y_cert + 8, h=20)
@@ -425,9 +482,9 @@ with tab1:
         3. **现场考勤红线 (IWAY G5.1) 与薪资合规 (G5.8)**：凡在厂区内每周工作时间累计达18小时以上的承包商/外包员工，必须按规定纳入本厂电子考勤系统进行真实考勤打卡，严禁瞒报、漏报工时；现场薪资与加班费发放不得低于当地法定最低工资标准。
         4. **危险作业许可管理**：严禁无证、超期或假证进行动火、临时用电、高处（≥2米）及有限空间作业。涉及危险作业必须提前向厂区 EHS 部门申报并获批《危险作业许可证》，落实安全交底、气体检测及专人全过程监护。
         5. **劳动防护用品 (PPE) 规范**：所有入场人员必须规范穿戴反光背心、安全帽、符合标准的安全鞋。高处作业必须正确系挂双大钩安全带（做到高挂低用），特种劳保用品严禁流于形式。
-        6. **消防安全与化学品管控**：厂区内全域严禁吸烟（除指定吸烟区外），严禁私自动用明火或遮挡、圈占消防器材。引入厂区使用的任何化学品必须提前报备并附带最新 SDS（安全数据表），落实防泄漏措施。
+        6. **消防安全与化学品管控**：厂区内全域严禁吸烟（除指定吸烟区外），严禁私自动用明火或遮挡、圈占消防器材。引入厂区使用的任何化学品必须提前报备并附带最新 SDS（安全数据表）, 落实防泄漏措施。
         7. **危险废弃物合规处置**：施工作业中产生的废机油、废油漆桶、含油抹布、废化学品包装物等属于危险废弃物，必须分类收集并交由厂区指定的危废暂存点规范处置，严禁私自倾倒、掩埋或混入普通生活垃圾。
-        8. **事故应急与隐患报告机制**：发生任何安全、环境事故（无论大小）或发现严重安全隐患，现场人员必须立即停止作业，并在第一时间向慧瑞现场负责人及 EHS 部门报告，严禁瞒报、谎报或拖延不报。
+        8. **事故应急与隐患报告机制**：发生任何安全、环境事故（无论大小）或发现严重隐患，现场人员必须立即停止作业，并在第一时间向慧瑞现场负责人及 EHS 部门报告，严禁瞒报、谎报或拖延不报。
         """)
 
     agree_terms = st.checkbox("☑️ 本人已完整阅读并理解上述 EHS 培训全部要求。")
@@ -536,12 +593,9 @@ with tab1:
                 "作业类别": "、".join(work_types),
                 "特种作业证号": cert_number,
                 "证照数量": len(cert_bytes_list),
-                "证照图片列表": cert_b64_list,
                 "证照Bytes列表": cert_bytes_list,
-                "考核方式": "、".join(exam_methods),
-                "培训评估": eval_result,
-                "签名图片B64": first_sig_b64,
                 "签名Bytes列表": sig_bytes_list,
+                "签名图片B64": first_sig_b64,
                 "提交时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             st.session_state.records.append(record)
@@ -565,7 +619,7 @@ with tab2:
         st.download_button(
             label="📥 导出培训台账 (Excel CSV)",
             data=csv_data,
-            file_name=f"慧瑞承包商安全培训台账_{datetime.now().strftime('%Y%m%d')}.csv",
+            file_name=f"慧瑞环保涂料安全培训台账_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv"
         )
 
@@ -585,7 +639,7 @@ with tab2:
             st.download_button(
                 label="📄 一键下载独立 PDF 签到表（含多人手写签名与证照）",
                 data=pdf_bytes,
-                file_name=f"TrainingRecord_{rec['承包商公司']}_{rec['记录编号']}.pdf",
+                file_name=f"承包商EHS入厂培训记录_{rec['承包商公司']}_{rec['记录编号']}.pdf",
                 mime="application/pdf",
                 type="primary"
             )
