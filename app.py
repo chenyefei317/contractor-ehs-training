@@ -236,36 +236,36 @@ def generate_viron_pdf(rec):
     pdf.set_font("CustomChinese", size=18)
     pdf.cell(190, 10, "承包商EHS入厂培训记录", ln=True, align="C")
     pdf.set_font("CustomChinese", size=10)
-    pdf.cell(190, 6, f"NO.: {rec['记录编号']}", ln=True, align="R")
+    pdf.cell(190, 6, f"NO.: {rec.get('记录编号', 'N/A')}", ln=True, align="R")
     
     col_w = [30, 65, 30, 65]
     pdf.cell(col_w[0], 9, "培训主题", border=1, align="C")
-    pdf.cell(col_w[1], 9, f"{rec['作业项目'][:14]}", border=1, align="C")
+    pdf.cell(col_w[1], 9, f"{rec.get('作业项目', '')[:14]}", border=1, align="C")
     pdf.cell(col_w[2], 9, "培训目的", border=1, align="C")
     pdf.cell(col_w[3], 9, "承包商安全培训，避免安全事故", border=1, ln=True, align="C")
     
     pdf.cell(col_w[0], 9, "培训时间", border=1, align="C")
-    pdf.cell(col_w[1], 9, rec["培训日期"], border=1, align="C")
+    pdf.cell(col_w[1], 9, rec.get("培训日期", ""), border=1, align="C")
     pdf.cell(col_w[2], 9, "培训地点", border=1, align="C")
-    pdf.cell(col_w[3], 9, rec["培训地点"], border=1, ln=True, align="C")
+    pdf.cell(col_w[3], 9, rec.get("培训地点", ""), border=1, ln=True, align="C")
     
     pdf.cell(col_w[0], 9, "培训对象", border=1, align="C")
-    pdf.cell(col_w[1], 9, rec["承包商公司"][:14], border=1, align="C")
+    pdf.cell(col_w[1], 9, rec.get("承包商公司", "")[:14], border=1, align="C")
     pdf.cell(col_w[2], 9, "主讲人", border=1, align="C")
-    pdf.cell(col_w[3], 9, rec["主讲人"], border=1, ln=True, align="C")
+    pdf.cell(col_w[3], 9, rec.get("主讲人", ""), border=1, ln=True, align="C")
     
     pdf.cell(col_w[0], 20, "参训人员信息", border=1, align="C")
     y_info = pdf.get_y()
     pdf.cell(160, 20, "", border=1, ln=True)
     pdf.set_xy(10 + col_w[0] + 3, y_info + 2)
     pdf.set_font("CustomChinese", size=8.5)
-    pdf.cell(150, 4, f"参训人员：{rec['参训人员名单']}", ln=True)
+    pdf.cell(150, 4, f"参训人员：{rec.get('参训人员名单', '')}", ln=True)
     pdf.set_x(10 + col_w[0] + 3)
-    pdf.cell(150, 4, f"身份证号：{rec['身份证号列表']}", ln=True)
+    pdf.cell(150, 4, f"身份证号：{rec.get('身份证号列表', '')}", ln=True)
     pdf.set_x(10 + col_w[0] + 3)
-    pdf.cell(150, 4, f"负责人电话：{rec['施工负责人电话']} | 作业类别：{rec['作业类别']}", ln=True)
+    pdf.cell(150, 4, f"负责人电话：{rec.get('施工负责人电话', '')} | 作业类别：{rec.get('作业类别', '')}", ln=True)
     pdf.set_x(10 + col_w[0] + 3)
-    pdf.cell(150, 4, f"特种作业证号：{rec['特种作业证号']}", ln=True)
+    pdf.cell(150, 4, f"特种作业证号：{rec.get('特种作业证号', '不涉及')}", ln=True)
     
     pdf.set_font("CustomChinese", size=10)
     pdf.cell(30, 24, "参训人员签字", border=1, align="C")
@@ -329,11 +329,11 @@ def generate_viron_pdf(rec):
         
     pdf.set_font("CustomChinese", size=9.5)
     pdf.cell(30, 7, "考核方式", border=1, align="C")
-    pdf.cell(160, 7, f"  [√] {rec['考核方式']}", border=1, ln=True)
+    pdf.cell(160, 7, f"  [√] {rec.get('考核方式', '现场提问')}", border=1, ln=True)
     
     eval_text = (
-        f"培训评估：[√] {rec['培训评估']}\n\n"
-        f"                                              签署日期：{rec['签署日期']}          评价人：{rec['主讲人']}"
+        f"培训评估：[√] {rec.get('培训评估', '通过培训考核，参训员工已理解本次培训内容，并按照相关要求来执行，已达到本次培训目的。')}\n\n"
+        f"                                              签署日期：{rec.get('签署日期', '')}          评价人：{rec.get('主讲人', '陈野菲')}"
     )
     pdf.multi_cell(190, 6, eval_text, border=1)
     
@@ -593,24 +593,39 @@ with tab1:
                 "作业类别": "、".join(work_types),
                 "特种作业证号": cert_number,
                 "证照数量": len(cert_bytes_list),
+                "证照图片列表": cert_b64_list,
                 "证照Bytes列表": cert_bytes_list,
+                "考核方式": "、".join(exam_methods),
+                "培训评估": eval_result,
                 "签名Bytes列表": sig_bytes_list,
                 "签名图片B64": first_sig_b64,
                 "提交时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
+            
             st.session_state.records.append(record)
+            save_records(st.session_state.records)
             
             st.session_state.random_questions = random.sample(QUESTION_BANK, 3)
-            st.success("🎉 培训记录提交成功！数据已成功保存在本地会话台账与 PDF 中。")
+            st.success("🎉 培训记录提交成功！数据已持久化保存至后台并可在台账与 PDF 中查看。")
 
 # ================= TAB 2: 台账与 PDF =================
 with tab2:
     st.subheader("🗂️ 已完成培训人员台账记录")
+    
+    st.session_state.records = load_records()
+    
+    if len(st.session_state.records) > 0:
+        if st.button("🗑️ 清空所有历史台账记录（归0）", type="primary"):
+            st.session_state.records = []
+            save_records([])
+            st.success("✅ 所有台账记录已成功清空并归零！")
+            st.rerun()
+
     if len(st.session_state.records) == 0:
         st.info("暂无签到记录，请先在第一个标签页完成提交。")
     else:
         df_display = pd.DataFrame([
-            {k: v for k, v in r.items() if k not in ["证照图片列表", "证照Bytes列表", "签名图片B64", "签名Bytes列表"]}
+            {k: v for k, v in r.items() if k not in ["证照图片列表", "证照Bytes列表", "签名图片B64", "签名Bytes列表", "证照图片列表_b64", "签名Bytes列表_b64"]}
             for r in st.session_state.records
         ])
         st.dataframe(df_display, use_container_width=True)
