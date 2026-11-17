@@ -7,6 +7,7 @@ import io
 import os
 import base64
 import random
+import urllib.request
 from fpdf import FPDF
 import qrcode
 
@@ -156,9 +157,12 @@ def generate_qr_code(url):
     return buffered.getvalue()
 
 def get_font_path():
-    """智能查找可用系统字体路径（兼容本地Mac/Windows及云端Linux环境）"""
+    """智能查找系统字体，若云端缺失则自动下载开源中文字体保障 PDF 导出"""
+    font_filename = "SimHei.ttf"
+    if os.path.exists(font_filename):
+        return font_filename
+        
     possible_paths = [
-        "SimHei.ttf",
         "/System/Library/Fonts/STHeiti Medium.ttc",
         "/System/Library/Fonts/PingFang.ttc",
         "/Library/Fonts/Arial Unicode.ttf",
@@ -171,6 +175,16 @@ def get_font_path():
     for path in possible_paths:
         if os.path.exists(path):
             return path
+            
+    # 如果本地和常见路径都没有，尝试自动从开源镜像下载一个轻量中文字体到当前目录
+    try:
+        font_url = "https://github.com/google/fonts/raw/main/ofl/notosanssc/NotoSansSC-Regular.ttf"
+        urllib.request.urlretrieve(font_url, font_filename)
+        if os.path.exists(font_filename):
+            return font_filename
+    except Exception:
+        pass
+        
     return None
 
 # ================= 核心模块：生成独立 PDF =================
@@ -428,7 +442,7 @@ with tab1:
         3. **现场考勤红线 (IWAY G5.1) 与薪资合规 (G5.8)**：凡在厂区内每周工作时间累计达18小时以上的承包商/外包员工，必须按规定纳入本厂电子考勤系统进行真实考勤打卡，严禁瞒报、漏报工时；现场薪资与加班费发放不得低于当地法定最低工资标准。
         4. **危险作业许可管理**：严禁无证、超期或假证进行动火、临时用电、高处（≥2米）及有限空间作业。涉及危险作业必须提前向厂区 EHS 部门申报并获批《危险作业许可证》，落实安全交底、气体检测及专人全过程监护。
         5. **劳动防护用品 (PPE) 规范**：所有入场人员必须规范穿戴反光背心、安全帽、符合标准的安全鞋。高处作业必须正确系挂双大钩安全带（做到高挂低用），特种劳保用品严禁流于形式。
-        6. **消防安全与化学品管控**：厂区内全域严禁吸烟（除指定吸烟区外），严禁私自动用明火或遮挡、圈占消防器材。引入厂区使用的任何化学品必须提前报备并附带最新 SDS（安全数据表）, 落实防泄漏措施。
+        6. **消防安全与化学品管控**：厂区内全域严禁吸烟（除指定吸烟区外），严禁私自动用明火或遮挡、圈占消防器材。引入厂区使用的任何化学品必须提前报备并附带最新 SDS（安全数据表），落实防泄漏措施。
         7. **危险废弃物合规处置**：施工作业中产生的废机油、废油漆桶、含油抹布、废化学品包装物等属于危险废弃物，必须分类收集并交由厂区指定的危废暂存点规范处置，严禁私自倾倒、掩埋或混入普通生活垃圾。
         8. **事故应急与隐患报告机制**：发生任何安全、环境事故（无论大小）或发现严重安全隐患，现场人员必须立即停止作业，并在第一时间向慧瑞现场负责人及 EHS 部门报告，严禁瞒报、谎报或拖延不报。
         """)
