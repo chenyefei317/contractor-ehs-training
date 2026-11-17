@@ -7,7 +7,6 @@ import io
 import os
 import base64
 import random
-import urllib.request
 from fpdf import FPDF
 import qrcode
 
@@ -157,34 +156,18 @@ def generate_qr_code(url):
     return buffered.getvalue()
 
 def get_font_path():
-    """智能查找系统字体，若云端缺失则自动下载开源中文字体保障 PDF 导出"""
-    font_filename = "SimHei.ttf"
-    if os.path.exists(font_filename):
-        return font_filename
-        
+    """自动匹配系统中可用的通用/开源中文字体路径"""
     possible_paths = [
-        "/System/Library/Fonts/STHeiti Medium.ttc",
-        "/System/Library/Fonts/PingFang.ttc",
-        "/Library/Fonts/Arial Unicode.ttf",
-        "C:\\Windows\\Fonts\\simhei.ttf",
-        "C:\\Windows\\Fonts\\msyh.ttc",
-        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux 云端文泉驿开源字体
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux 思源黑体
+        "/System/Library/Fonts/STHeiti Medium.ttc",     # Mac 华文黑体
+        "/System/Library/Fonts/PingFang.ttc",           # Mac 苹方字体
+        "C:\\Windows\\Fonts\\msyh.ttc",                  # Windows 微软雅黑
+        "C:\\Windows\\Fonts\\simhei.ttf"                 # Windows 黑体
     ]
     for path in possible_paths:
         if os.path.exists(path):
             return path
-            
-    # 如果本地和常见路径都没有，尝试自动从开源镜像下载一个轻量中文字体到当前目录
-    try:
-        font_url = "https://github.com/google/fonts/raw/main/ofl/notosanssc/NotoSansSC-Regular.ttf"
-        urllib.request.urlretrieve(font_url, font_filename)
-        if os.path.exists(font_filename):
-            return font_filename
-    except Exception:
-        pass
-        
     return None
 
 # ================= 核心模块：生成独立 PDF =================
